@@ -281,6 +281,10 @@ function App() {
 
     try {
       const run = await api.startRun(firstRun);
+      // Sync processing ID if backend generated a new one
+      if (run.runId !== firstRun.runId) {
+        setProcessingRunId(run.runId as string);
+      }
       setRunId(run.runId as string);
       connectWebsocket(run.runId as string);
       setIsRunning(true);
@@ -324,6 +328,8 @@ function App() {
 
             void api.startRun(nextRun)
               .then(run => {
+                // Sync processing ID if backend generated a new one
+                setProcessingRunId(run.runId as string);
                 setRunId(run.runId as string);
                 connectWebsocket(run.runId as string);
               });
