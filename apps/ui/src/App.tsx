@@ -118,7 +118,7 @@ function App() {
         const next = (await api.getRun(runId)) as RunState;
         setRunState(next);
 
-        if (next.status === 'success' || next.status === 'blocked' || next.status === 'error') {
+        if (!isBatchMode && (next.status === 'success' || next.status === 'blocked' || next.status === 'error')) {
           setIsRunning(false);
         }
       } catch {
@@ -259,7 +259,6 @@ function App() {
     // 4. Reset Batch State
     setBatchResults([]);
     setIsBatchMode(queue.length > 1);
-    setIsBatchMode(queue.length > 1);
     // Queue should contain everything AFTER the first run
     setBatchQueue(queue.slice(1));
 
@@ -267,7 +266,6 @@ function App() {
     const firstRun = queue[0];
     if (!firstRun) return;
 
-    // Remove first from queued state (it's now active)
     // Remove first from queued state (it's now active)
     // setBatchQueue(queue.slice(1)); // REMOVED: Managed above to avoid state race conditions
     setProcessingRunId(firstRun.runId ?? null);
@@ -589,10 +587,7 @@ function App() {
                         <span className="font-semibold block">Strategy:</span>
                         <span className="capitalize">{strategy}</span>
                       </div>
-                      <div>
-                        <span className="font-semibold block">Speed:</span>
-                        <span className="capitalize">{speedMode}</span>
-                      </div>
+
                       <div className="col-span-2">
                         <span className="font-semibold block">Instructions:</span>
                         <span className="italic block truncate" title={instructions}>{instructions}</span>
