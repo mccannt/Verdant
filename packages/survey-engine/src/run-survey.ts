@@ -350,7 +350,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
         });
 
         const artifacts: StepArtifact[] = [];
-        if (run.captureScreenshots || decision.needs_screenshot) {
+        if (run.captureScreenshots) {
           const artifact = await captureScreenshot(page, run.artifactsDir, 'pre-action', step);
           artifacts.push(artifact);
           emit(run, { type: 'artifact', step, artifact });
