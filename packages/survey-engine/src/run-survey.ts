@@ -204,6 +204,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
 
   try {
     emit(run, { type: 'log', level: 'info', message: `Opening survey: ${run.surveyUrl}` });
+    emit(run, { type: 'status', status: 'running', message: 'Opening survey page...' });
     await page.goto(run.surveyUrl, {
       waitUntil: 'domcontentloaded',
       timeout: run.speedMode === 'fast' ? 8000 : 15000
@@ -213,6 +214,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
     let initialState = await extractQuestionState(page);
     let retries = 0;
     const maxRetries = 10;
+    emit(run, { type: 'status', status: 'running', message: 'Analyzing page structure...' });
 
     while (!isValidSurveySurface(initialState) && retries < maxRetries) {
       emit(run, { type: 'log', level: 'debug', message: `State extraction check ${retries + 1}/${maxRetries}: No valid surface found. Retrying in 1s...` });
@@ -247,6 +249,11 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
           level: 'info',
           step,
           message: `Step ${step}: ${state.questionText} (${state.inputType})`
+        });
+        emit(run, {
+          type: 'status',
+          status: 'running',
+          message: `Step ${step}: ${state.questionText.substring(0, 60)}${state.questionText.length > 60 ? '...' : ''}`
         });
 
         // Emit intermediate status update for UI
