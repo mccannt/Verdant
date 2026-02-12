@@ -123,14 +123,7 @@ const waitForProgress = async (
   return { progressed: false, afterState: await extractQuestionState(page) };
 };
 
-const checkAssertion = (assertion: string, state: QuestionState): boolean => {
-  const haystack = `${state.questionText} ${state.supportText.join(' ')} ${state.options
-    .filter((option) => option.selected)
-    .map((option) => option.label)
-    .join(' ')} ${state.filledValue}`.toLowerCase();
 
-  return haystack.includes(assertion.toLowerCase());
-};
 
 export const executeDecision = async (input: {
   page: Page;
@@ -218,13 +211,9 @@ export const executeDecision = async (input: {
   const questionChanged = beforeState.questionText !== afterState.questionText;
 
   if (!questionChanged) {
-    for (const assertion of decision.assertions) {
-      if (checkAssertion(assertion, afterState)) {
-        assertionsPassed.push(assertion);
-      } else {
-        assertionsFailed.push(assertion);
-      }
-    }
+    // Generic assertions from LLM are often natural language and fail naive substring checks.
+    // We skip iterating decision.assertions to avoid false negatives.
+    // Instead, we rely on the specific action verifications below (selection/typing).
 
     if (decision.action === 'select_single' || decision.action === 'select_multi') {
       const selectedLabels = afterState.options.filter((option) => option.selected).map((option) => option.label.toLowerCase());

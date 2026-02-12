@@ -53,6 +53,7 @@ export class RunController {
 
     const initial: RunState = {
       runId,
+      surveyUrl: input.surveyUrl,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
