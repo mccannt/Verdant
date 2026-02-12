@@ -1,0 +1,23 @@
+{
+  "name": "verdant",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm --workspace @verdant/llm run build && npm --workspace @verdant/survey-engine run build && concurrently -n LLM,ENGINE,RUNNER,UI -c yellow,blue,cyan,green \"npm --workspace @verdant/llm run dev\" \"npm --workspace @verdant/survey-engine run dev\" \"npm --workspace @verdant/runner run dev\" \"npm --workspace @verdant/ui run dev\"",
+    "build": "npm --workspace @verdant/llm run build && npm --workspace @verdant/survey-engine run build && npm --workspace @verdant/runner run build && npm --workspace @verdant/ui run build",
+    "typecheck": "npm --workspace @verdant/llm run typecheck && npm --workspace @verdant/survey-engine run typecheck && npm --workspace @verdant/runner run typecheck && npm --workspace @verdant/ui run typecheck",
+    "lint": "npm run lint -ws --if-present",
+    "start": "npm --workspace @verdant/runner run start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
