@@ -259,14 +259,17 @@ function App() {
     // 4. Reset Batch State
     setBatchResults([]);
     setIsBatchMode(queue.length > 1);
-    setBatchQueue(queue); // Full queue initially
+    setIsBatchMode(queue.length > 1);
+    // Queue should contain everything AFTER the first run
+    setBatchQueue(queue.slice(1));
 
     // 5. Start First Run
     const firstRun = queue[0];
     if (!firstRun) return;
 
     // Remove first from queued state (it's now active)
-    setBatchQueue(queue.slice(1));
+    // Remove first from queued state (it's now active)
+    // setBatchQueue(queue.slice(1)); // REMOVED: Managed above to avoid state race conditions
     setProcessingRunId(firstRun.runId ?? null);
 
     // Clear logs/artifacts for fresh start visual
@@ -578,20 +581,49 @@ function App() {
                   <span className="font-semibold">Run ID:</span>{' '}
                   <span className="mono text-xs">{runId || '—'}</span>
                 </p>
-                <p>
-                  <span className="font-semibold">Status:</span>{' '}
-                  <span className={`font-bold ${statusTone.replace('bg-', 'text-').split(' ')[0]}`}>
-                    {(runState?.status ?? (isRunning ? 'running' : 'idle')).toUpperCase()}
-                  </span>
-                </p>
-                <p>
-                  <span className="font-semibold">Message:</span> {statusMessage || runState?.report?.message || 'Waiting for run...'}
-                </p>
-                <p>
-                  <span className="font-semibold">Steps:</span> {states.length > 0 ? states.length : (runState?.report?.steps.length ?? 0)}
-                </p>
+                {/* Run Configuration Display */}
+                {isRunning && (
+                  <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10 text-xs text-black/60 dark:text-white/60">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="font-semibold block">Strategy:</span>
+                        <span className="capitalize">{strategy}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold block">Speed:</span>
+                        <span className="capitalize">{speedMode}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="font-semibold block">Instructions:</span>
+                        <span className="italic block truncate" title={instructions}>{instructions}</span>
+                      </div>
+                      {isBatchMode && (
+                        <div className="col-span-2 mt-1">
+                          <span className="font-semibold">Batch:</span>{' '}
+                          {batchResults.length + 1} of {batchResults.length + batchQueue.length + (processingRunId ? 1 : 0)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10">
+                  <p>
+                    <span className="font-semibold">Status:</span>{' '}
+                    <span className={`font-bold ${statusTone.replace('bg-', 'text-').split(' ')[0]}`}>
+                      {(runState?.status ?? (isRunning ? 'running' : 'idle')).toUpperCase()}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="font-semibold">Message:</span> {statusMessage || runState?.report?.message || 'Waiting for run...'}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Steps:</span> {states.length > 0 ? states.length : (runState?.report?.steps.length ?? 0)}
+                  </p>
+                </div>
               </div>
             </div>
+
 
             <div className="panel p-5 bg-white shadow-panel dark:bg-white/5 dark:shadow-panel-dark">
               <h2 className="mb-3 text-lg font-semibold dark:text-white">Decisions</h2>
@@ -766,7 +798,7 @@ function App() {
             </div>
           </div>
         )
-      }</div>
+      }</div >
   );
 }
 
