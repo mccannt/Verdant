@@ -99,8 +99,56 @@ Click the **Configure Provider & API Keys** button to open the settings modal.
 Defines how the runner selects options for multiple-choice questions:
 *   **First**: Always selects the first available option.
 *   **Last**: Always selects the last available option.
-*   **Random**: Selects a random option (seeded for reproducibility).
-*   **Ruleset**: Uses a JSON configuration to define specific choices for specific questions (advanced).
+*   **Random**: Selects a random option. The selection is seeded by the run ID and question text, so the same run always produces the same choices (reproducible).
+*   **Ruleset**: Uses a JSON configuration for fine-grained control over how each question type is answered. See [Ruleset Configuration](#ruleset-configuration) below.
+
+> **Note:** The strategy acts as a *fallback* when the LLM cannot determine an answer, and also informs the LLM's decision-making via the system prompt. Most of the time the LLM will follow your **Instructions** field; the strategy takes over when the LLM is uncertain or unavailable.
+
+#### Ruleset Configuration
+
+When **Ruleset** is selected, a JSON editor appears. The configuration object has three optional keys:
+
+```json
+{
+  "singleSelect": "first" | "last" | "random",
+  "multiSelect": {
+    "mode": "first_n" | "all" | "random_n",
+    "n": 2
+  },
+  "text": {
+    "default": "AUTO_TEST_RESPONSE",
+    "byKeyword": {
+      "email": "test.user@example.com",
+      "name": "Test User"
+    }
+  }
+}
+```
+
+| Key | Description |
+|-----|-------------|
+| `singleSelect` | How to pick from **single-choice** questions. One of `"first"`, `"last"`, or `"random"` (seeded). Defaults to `"first"`. |
+| `multiSelect.mode` | How to pick from **multi-choice** questions. `"first_n"` selects the first N options; `"all"` selects every option; `"random_n"` selects N options at random (seeded). Defaults to `"first_n"`. |
+| `multiSelect.n` | Number of options to select when mode is `"first_n"` or `"random_n"`. Must be between 1–10. Defaults to `2`. |
+| `text.default` | Default answer for any free-text input field. Defaults to `"AUTO_TEST_RESPONSE"`. |
+| `text.byKeyword` | Map of **keyword → answer** for free-text fields. If the question text contains the keyword (case-insensitive), the corresponding answer is used instead of the default. Useful for filling in emails, names, dates, etc. |
+
+**Example** — select the first single-choice option, the first 3 multi-choice options, and fill text fields intelligently:
+
+```json
+{
+  "singleSelect": "first",
+  "multiSelect": { "mode": "first_n", "n": 3 },
+  "text": {
+    "default": "N/A",
+    "byKeyword": {
+      "email": "tester@example.com",
+      "name": "Jane Doe",
+      "date": "2024-01-15"
+    }
+  }
+}
+```
 
 ### Run Options
 *   **Capture screenshots**: Saves a screenshot at every step of the survey.
