@@ -14,9 +14,10 @@ Rules:
 Return ONLY valid JSON matching the provided schema.`;
 
 const schemaDoc = {
-  action: 'select_single | select_multi | type_text | click_next | click_submit | cannot_proceed',
+  action: 'select_single | select_multi | type_text | click_next | click_submit | cannot_proceed | set_slider | set_date | select_matrix',
   selections: [{ label: 'string' }],
-  text: 'string',
+  text: 'string (numeric value for set_slider, ISO-8601 date YYYY-MM-DD for set_date)',
+  matrixSelections: [{ rowLabel: 'string', columnLabel: 'string' }],
   confidence: 0,
   reason: 'string',
   needs_screenshot: true,
@@ -41,7 +42,12 @@ export const buildStepPrompt = (input: {
       'Use only options from questionState.options.',
       'If the question is already answered and Next/Submit is available, prefer click_next or click_submit.',
       'When inputType is text, type useful deterministic text based on instructions/ruleset/sheetData.',
-      'Set cannot_proceed only when no safe action exists.'
+      'If inputType is unknown but options are listed, treat it as single_select and pick the best option.',
+      'If inputType is unknown with no options but navigationButtons are present, use click_next or click_submit.',
+      'Set cannot_proceed only when no safe action exists and no navigation is possible.',
+      'For slider questions (inputType=slider): use set_slider and put the chosen number as a string in the text field. Pick a value between sliderMin and sliderMax that best suits the instructions.',
+      'For date-picker questions (inputType=date_picker): use set_date and put an ISO-8601 date string (YYYY-MM-DD) in the text field.',
+      'For matrix questions (inputType=matrix): use select_matrix and list one { rowLabel, columnLabel } pair per row from matrixRows. Every row must have a selection.'
     ]
   };
 

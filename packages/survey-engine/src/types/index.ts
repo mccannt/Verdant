@@ -20,13 +20,20 @@ export type SurveyOption = {
 export type QuestionState = {
   questionText: string;
   supportText: string[];
-  inputType: 'single_select' | 'multi_select' | 'text' | 'yes_no' | 'unknown';
+  inputType: 'single_select' | 'multi_select' | 'text' | 'yes_no' | 'unknown'
+           | 'slider' | 'matrix' | 'date_picker';
   options: SurveyOption[];
   filledValue: string;
   navigationButtons: string[];
   progress: string | null;
   visibleInputCount: number;
   url: string;
+  // Slider metadata — present only when inputType === 'slider'
+  sliderMin?: number;
+  sliderMax?: number;
+  sliderStep?: number;
+  // Matrix metadata — present only when inputType === 'matrix'
+  matrixRows?: Array<{ rowLabel: string; options: SurveyOption[] }>;
 };
 
 export type StepArtifact = {
