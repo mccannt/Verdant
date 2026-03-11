@@ -83,9 +83,9 @@ The **Run Configuration** panel is your control center. Here you define *what* t
 
 ### Provider & API Keys
 Click the **Configure Provider & API Keys** button to open the settings modal.
-*   **Provider**: Select your LLM provider (e.g., OpenAI, Anthropic).
-*   **API Key**: Enter your API key for the selected provider. This is stored locally in your browser.
-*   **Model**: Choose the specific model (e.g., `gpt-4o`, `claude-3-5-sonnet`) to power the validation.
+*   **Provider**: Select your LLM provider. Supported options: **OpenAI**, **Anthropic**, **Google**, **Groq**, **OpenRouter**, **xAI**, **DeepSeek**.
+*   **API Key**: Enter your API key for the selected provider. Keys are stored encrypted on disk — never in the browser or plain text.
+*   **Model**: Choose the specific model (e.g., `gpt-4o`, `claude-sonnet-4-5`, `llama-3.3-70b-versatile`) to power the validation.
 
 ![Provider Settings](docs/images/modal_light_mode_1770913362324.png)
 
@@ -175,9 +175,9 @@ Located at the top right, this panel gives you the high-level status.
 
 ### Decisions Panel
 This panel shows the "thought process" of the LLM. For each step, it displays a JSON object containing:
-*   **Action**: What did it do? (e.g., `select_single`, `type_text`, `click_next`).
+*   **Action**: What did it do? Common values: `select_single`, `select_multi`, `type_text`, `click_next`, `click_submit`, `set_slider`, `set_date`, `select_matrix`.
 *   **Reason**: Why did it do that? (The LLM's explanation based on your instructions).
-*   **Confidence**: How confident was it? (0-1 score).
+*   **Confidence**: How confident was it? (0–1 score).
 
 ### Live Logs
 A scrolling terminal view that shows every technical event.

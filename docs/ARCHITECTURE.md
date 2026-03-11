@@ -28,7 +28,7 @@
 ## Key Components
 - `apps/runner/src/lib/key-vault.ts`: AES-256-GCM encryption-at-rest for API keys.
 - `apps/runner/src/lib/sheet.ts`: Google Sheet URL parsing and CSV key/value extraction.
-- `packages/llm/src/client.ts`: Provider abstraction + strict decision parsing.
+- `packages/llm/src/client.ts`: Provider abstraction (OpenAI, Anthropic, Google, Groq, OpenRouter, xAI, DeepSeek) + strict Zod decision parsing.
 - `packages/survey-engine/src/extractor/question-state.ts`: Dynamic question/input extraction.
 - `packages/survey-engine/src/run-survey.ts`: Step loop, retries, assertions, screenshots, reporting.
 
