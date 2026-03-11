@@ -11,3 +11,7 @@ artifacts
 apps/runner/.data
 apps/ui/.vite
 coverage
+
+# Temp screenshot working files
+*.png
+!docs/images/*.png

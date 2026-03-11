@@ -37,6 +37,8 @@ const defaultRuleset = `{
   }
 }`;
 
+const SHOW_RUNS_PER_URL = false;
+
 const toArtifactUrl = (absolutePath: string) => {
   const normalized = absolutePath.replaceAll('\\', '/');
   const marker = '/artifacts/';
@@ -45,7 +47,7 @@ const toArtifactUrl = (absolutePath: string) => {
 };
 
 function App() {
-  const [surveyUrl, setSurveyUrl] = useState('https://app.greenspacehealth.com/sample/inq');
+  const [surveyUrl, setSurveyUrl] = useState('');
   const [sheetUrl, setSheetUrl] = useState('');
   const [csvContent, setCsvContent] = useState('');
   const [instructions, setInstructions] = useState('Answer all questions as a realistic first-time customer.');
@@ -66,8 +68,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showDataOptions, setShowDataOptions] = useState(false);
   const [verbose, setVerbose] = useState(true);
-  const [provider, setProvider] = useState<Provider>('openai');
-  const [model, setModel] = useState(PROVIDER_MODELS.openai[0]);
+  const [provider, setProvider] = useState<Provider>('groq');
+  const [model, setModel] = useState('llama-3.3-70b-versatile');
   const [apiKey, setApiKey] = useState('');
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [sheetPreview, setSheetPreview] = useState<Record<string, string>>({});
@@ -85,11 +87,11 @@ function App() {
 
   const statusTone = useMemo(() => {
     const status = runState?.status ?? 'idle';
-    if (status === 'success') return 'bg-gs-teal/10 text-gs-teal';
-    if (status === 'error') return 'bg-ember/10 text-ember';
-    if (status === 'blocked') return 'bg-gs-dark/10 text-gs-dark';
-    if (status === 'running') return 'bg-gs-blue/20 text-gs-dark';
-    return 'bg-black/5 text-black/70';
+    if (status === 'success') return 'bg-gs-teal text-white';
+    if (status === 'error') return 'bg-ember text-white';
+    if (status === 'blocked') return 'bg-amber-500 text-white';
+    if (status === 'running') return 'bg-gs-blue text-gs-dark';
+    return 'bg-black/15 text-black/70 dark:bg-white/15 dark:text-white/80';
   }, [runState?.status]);
 
   const loadKeys = async () => {
@@ -375,7 +377,7 @@ function App() {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-verdant-dark text-verdant-text-light' : 'bg-verdant-light text-verdant-text'}`}>
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 px-6 py-4 backdrop-blur-md dark:border-white/10 dark:bg-verdant-dark/80">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between">
           <div className="flex items-center gap-4">
             <LogoIcon />
             <div>
@@ -388,7 +390,8 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className={`status-pill ${statusTone} text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full`}>
+            <div className={`flex items-center gap-2 rounded-full border border-current/20 px-4 py-1.5 text-xs font-bold uppercase tracking-wide shadow-sm ${statusTone}`}>
+              <span className={`h-2 w-2 flex-shrink-0 rounded-full bg-current ${(runState?.status ?? 'idle') === 'running' ? 'animate-pulse' : 'opacity-60'}`} />
               {runState?.status ?? 'idle'}
             </div>
             <button
@@ -406,7 +409,7 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-[1600px] px-6 py-5 lg:px-10">
         {error && (
           <div className="panel mb-6 border-ember/40 bg-ember/10 p-4 text-sm text-ember dark:text-red-300">
             <strong className="mr-2">Error:</strong>
@@ -414,92 +417,98 @@ function App() {
           </div>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[400px_1fr]">
-          <section className="panel space-y-6 border-black/5 bg-white p-6 shadow-panel dark:border-white/10 dark:bg-white/5 dark:shadow-panel-dark">
-            <h2 className="text-lg font-semibold dark:text-white">Run Configuration</h2>
+        <section className="panel border-black/5 bg-white p-6 shadow-panel dark:border-white/10 dark:bg-white/5 dark:shadow-panel-dark">
+          <h2 className="mb-5 text-lg font-semibold dark:text-white">Run Configuration</h2>
+          <div className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
 
-            <div className="grid gap-3 sm:grid-cols-4">
-              <label className="block text-sm sm:col-span-3 dark:text-white/80">
-                Survey URL(s) - one per line
-                <textarea
-                  className="field mt-1 min-h-[5rem] whitespace-pre dark:bg-black/20 dark:border-white/10 dark:text-white"
-                  value={surveyUrl}
-                  onChange={(event) => setSurveyUrl(event.target.value)}
-                  placeholder="https://..."
-                />
-              </label>
-              <label className="block text-sm dark:text-white/80">
-                Runs per URL
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  className="field mt-1 dark:bg-black/20 dark:border-white/10 dark:text-white"
-                  value={iterations}
-                  onChange={(e) => setIterations(parseInt(e.target.value) || 1)}
-                />
-              </label>
-            </div>
+            {/* LEFT COLUMN: URL, Provider, Data */}
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm dark:text-white/80">
+                  Survey URL(s) — one per line
+                  <textarea
+                    className="field mt-1 min-h-28 whitespace-pre dark:bg-black/20 dark:border-white/10 dark:text-white"
+                    value={surveyUrl}
+                    onChange={(event) => setSurveyUrl(event.target.value)}
+                    placeholder="https://your-survey-url.com"
+                  />
+                </label>
+                {SHOW_RUNS_PER_URL && (
+                  <label className="mt-3 block text-sm dark:text-white/80">
+                    Runs per URL
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      className="field mt-1 dark:bg-black/20 dark:border-white/10 dark:text-white"
+                      value={iterations}
+                      onChange={(e) => setIterations(parseInt(e.target.value) || 1)}
+                    />
+                  </label>
+                )}
+              </div>
 
-            <button
-              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-medium transition hover:bg-black/5 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-              onClick={() => setShowSettings(true)}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-              Configure Provider & API Keys
-            </button>
-
-            <div className="rounded-xl border border-black/5 bg-white/50 p-3 dark:border-white/10 dark:bg-white/5">
               <button
-                className="flex w-full items-center justify-between text-sm font-medium text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white"
-                onClick={() => setShowDataOptions(!showDataOptions)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-medium transition hover:bg-black/5 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                onClick={() => setShowSettings(true)}
               >
-                <span>Load Data from Sheet/CSV (Optional)</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={`transition-transform ${showDataOptions ? 'rotate-180' : ''}`}
-                >
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                Configure Provider & API Keys
               </button>
 
-              {showDataOptions && (
-                <div className="mt-3 space-y-4 pt-2">
-                  <label className="block text-sm dark:text-white/80">
-                    Google Sheet URL
-                    <input className="field mt-1 dark:bg-black/20 dark:border-white/10 dark:text-white" value={sheetUrl} onChange={(event) => setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." />
-                  </label>
+              <div className="rounded-xl border border-black/5 bg-white/50 p-3 dark:border-white/10 dark:bg-white/5">
+                <button
+                  className="flex w-full items-center justify-between text-sm font-medium text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white"
+                  onClick={() => setShowDataOptions(!showDataOptions)}
+                >
+                  <span>Load Data from Sheet/CSV (Optional)</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`transition-transform ${showDataOptions ? 'rotate-180' : ''}`}
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
 
-                  <label className="block text-sm dark:text-white/80">
-                    CSV Fallback
-                    <input className="field mt-1 dark:bg-black/20 dark:border-white/10 dark:text-white" type="file" accept=".csv,text/csv" onChange={(event) => void onCsvFile(event.target.files?.[0] ?? null)} />
-                  </label>
+                {showDataOptions && (
+                  <div className="mt-3 space-y-4 pt-2">
+                    <label className="block text-sm dark:text-white/80">
+                      Google Sheet URL
+                      <input className="field mt-1 dark:bg-black/20 dark:border-white/10 dark:text-white" value={sheetUrl} onChange={(event) => setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." />
+                    </label>
 
-                  <div className="flex items-center gap-2">
-                    <button className="rounded-xl border border-black/15 px-3 py-2 text-sm dark:border-white/20 dark:text-white" type="button" onClick={onResolveSheet}>
-                      Preview Sheet Data
-                    </button>
-                    <span className="mono text-xs text-black/55 dark:text-white/40">{Object.keys(sheetPreview).length} key/value pairs</span>
+                    <label className="block text-sm dark:text-white/80">
+                      CSV Fallback
+                      <input className="field mt-1 dark:bg-black/20 dark:border-white/10 dark:text-white" type="file" accept=".csv,text/csv" onChange={(event) => void onCsvFile(event.target.files?.[0] ?? null)} />
+                    </label>
+
+                    <div className="flex items-center gap-2">
+                      <button className="rounded-xl border border-black/15 px-3 py-2 text-sm dark:border-white/20 dark:text-white" type="button" onClick={onResolveSheet}>
+                        Preview Sheet Data
+                      </button>
+                      <span className="mono text-xs text-black/55 dark:text-white/40">{Object.keys(sheetPreview).length} key/value pairs</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
-            <label className="block text-sm dark:text-white/80">
-              Instructions
-              <textarea className="field mt-1 min-h-24 dark:bg-black/20 dark:border-white/10 dark:text-white" value={instructions} onChange={(event) => setInstructions(event.target.value)} />
-            </label>
+            {/* RIGHT COLUMN: Instructions, Strategy, Options, Run */}
+            <div className="space-y-5">
+              <label className="block text-sm dark:text-white/80">
+                Instructions
+                <textarea className="field mt-1 min-h-28 dark:bg-black/20 dark:border-white/10 dark:text-white" value={instructions} onChange={(event) => setInstructions(event.target.value)} />
+              </label>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm dark:text-white/80 whitespace-nowrap">
+              <label className="block text-sm dark:text-white/80">
                 Answer Strategy
                 <select className="field mt-1 dark:bg-black/20 dark:border-white/10 dark:text-white" value={strategy} onChange={(event) => setStrategy(event.target.value as RunPayload['strategy'])}>
                   <option value="first">First</option>
@@ -508,139 +517,133 @@ function App() {
                   <option value="ruleset">Ruleset</option>
                 </select>
               </label>
-            </div>
 
-            {strategy === 'ruleset' && (
-              <label className="block text-sm dark:text-white/80">
-                Ruleset JSON
-                <textarea className="field mono mt-1 min-h-40 text-xs dark:bg-black/20 dark:border-white/10 dark:text-white" value={rulesetJson} onChange={(event) => setRulesetJson(event.target.value)} />
-              </label>
-            )}
+              {strategy === 'ruleset' && (
+                <label className="block text-sm dark:text-white/80">
+                  Ruleset JSON
+                  <textarea className="field mono mt-1 min-h-40 text-xs dark:bg-black/20 dark:border-white/10 dark:text-white" value={rulesetJson} onChange={(event) => setRulesetJson(event.target.value)} />
+                </label>
+              )}
 
-            <div className="flex flex-wrap gap-3">
-              <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
-                <input type="checkbox" className="accent-gs-teal" checked={captureScreenshots} onChange={(event) => setCaptureScreenshots(event.target.checked)} />
-                Capture screenshots
-              </label>
-              <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
-                <input type="checkbox" className="accent-gs-teal" checked={recordVideo} onChange={(event) => setRecordVideo(event.target.checked)} />
-                Record Video
-              </label>
-              <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
-                <input type="checkbox" className="accent-gs-teal" checked={completeSurvey} onChange={(event) => setCompleteSurvey(event.target.checked)} />
-                Complete survey
-              </label>
-              <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
-                <input type="checkbox" className="accent-gs-teal" checked={verbose} onChange={(event) => setVerbose(event.target.checked)} />
-                Verbose Logging
-              </label>
-            </div>
-
-            <button
-              className="w-full rounded-xl bg-gs-blue px-4 py-3 text-sm font-bold text-gs-dark shadow-sm transition hover:bg-[#8bb4c5] disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              disabled={isRunning || !surveyUrl.trim() || !instructions.trim()}
-              onClick={() => void onRun()}
-            >
-              {isRunning ? 'Running...' : 'Run Survey'}
-            </button>
-          </section>
-
-          <section className="space-y-6">
-            {/* Batch Progress Report */}
-            {batchResults.length > 0 && (
-              <div className="panel p-5 mb-6 border-l-4 border-verdant-accent bg-white dark:bg-white/5 shadow-panel dark:shadow-panel-dark">
-                <h2 className="mb-3 text-lg font-semibold flex justify-between dark:text-white">
-                  <span>Batch Progress</span>
-                  <span className="text-sm font-normal text-black/60 dark:text-white/60">
-                    {batchResults.length} / {batchResults.length + batchQueue.length + (processingRunId ? 1 : 0)} runs
-                  </span>
-                </h2>
-                <div className="max-h-40 overflow-y-auto space-y-1 text-sm">
-                  {batchResults.map((res, i) => (
-                    <div key={i} className="flex items-center justify-between border-b border-black/5 pb-1 last:border-0 dark:border-white/10">
-                      <span className="truncate max-w-[70%] text-xs mono dark:text-white/80">{res.url}</span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${res.status === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
-                        res.status === 'blocked' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' :
-                          'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-                        }`}>
-                        {res.status.toUpperCase()}
-                      </span>
-                    </div>
-                  ))}
-                  {isBatchMode && processingRunId && (
-                    <div className="flex items-center justify-between pt-1 animate-pulse opacity-60 dark:text-white/70">
-                      <span className="text-xs">Running next...</span>
-                      <span className="text-xs bg-gray-100 px-2 py-0.5 rounded dark:bg-white/10">PENDING</span>
-                    </div>
-                  )}
-                </div>
+              <div className="flex flex-wrap gap-3">
+                <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
+                  <input type="checkbox" className="accent-gs-teal" checked={captureScreenshots} onChange={(event) => setCaptureScreenshots(event.target.checked)} />
+                  Capture screenshots
+                </label>
+                <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
+                  <input type="checkbox" className="accent-gs-teal" checked={recordVideo} onChange={(event) => setRecordVideo(event.target.checked)} />
+                  Record Video
+                </label>
+                <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
+                  <input type="checkbox" className="accent-gs-teal" checked={completeSurvey} onChange={(event) => setCompleteSurvey(event.target.checked)} />
+                  Complete survey
+                </label>
+                <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-gs-teal/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 whitespace-nowrap">
+                  <input type="checkbox" className="accent-gs-teal" checked={verbose} onChange={(event) => setVerbose(event.target.checked)} />
+                  Verbose Logging
+                </label>
               </div>
-            )}
 
-            <div className="panel p-5 bg-white shadow-panel dark:bg-white/5 dark:shadow-panel-dark">
-              <h2 className="mb-3 text-lg font-semibold dark:text-white">Run Report</h2>
-              <div className="space-y-2 text-sm dark:text-white/80">
-                <p>
-                  <span className="font-semibold">Run ID:</span>{' '}
-                  <span className="mono text-xs">{runId || '—'}</span>
-                </p>
-                {/* Run Configuration Display */}
-                {isRunning && (
-                  <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10 text-xs text-black/60 dark:text-white/60">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="font-semibold block">Strategy:</span>
-                        <span className="capitalize">{strategy}</span>
-                      </div>
+              <button
+                className="w-full rounded-xl bg-gs-blue px-4 py-3 text-sm font-bold text-gs-dark shadow-sm transition hover:bg-[#8bb4c5] disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                disabled={isRunning || !surveyUrl.trim() || !instructions.trim()}
+                onClick={() => void onRun()}
+              >
+                {isRunning ? 'Running...' : 'Run Survey'}
+              </button>
+            </div>
 
-                      <div className="col-span-2">
-                        <span className="font-semibold block">Instructions:</span>
-                        <span className="italic block truncate" title={instructions}>{instructions}</span>
-                      </div>
-                      {isBatchMode && (
-                        <div className="col-span-2 mt-1">
-                          <span className="font-semibold">Batch:</span>{' '}
-                          {batchResults.length + 1} of {batchResults.length + batchQueue.length + (processingRunId ? 1 : 0)}
-                        </div>
-                      )}
-                    </div>
+          </div>
+        </section>
+
+        {/* Results: Batch Progress + Run Report */}
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          {batchResults.length > 0 && (
+            <div className="panel p-5 border-l-4 border-verdant-accent bg-white dark:bg-white/5 shadow-panel dark:shadow-panel-dark">
+              <h2 className="mb-3 text-lg font-semibold flex justify-between dark:text-white">
+                <span>Batch Progress</span>
+                <span className="text-sm font-normal text-black/60 dark:text-white/60">
+                  {batchResults.length} / {batchResults.length + batchQueue.length + (processingRunId ? 1 : 0)} runs
+                </span>
+              </h2>
+              <div className="max-h-40 overflow-y-auto space-y-1 text-sm">
+                {batchResults.map((res, i) => (
+                  <div key={i} className="flex items-center justify-between border-b border-black/5 pb-1 last:border-0 dark:border-white/10">
+                    <span className="truncate max-w-[70%] text-xs mono dark:text-white/80">{res.url}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${res.status === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
+                      res.status === 'blocked' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' :
+                        'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                      }`}>
+                      {res.status.toUpperCase()}
+                    </span>
+                  </div>
+                ))}
+                {isBatchMode && processingRunId && (
+                  <div className="flex items-center justify-between pt-1 animate-pulse opacity-60 dark:text-white/70">
+                    <span className="text-xs">Running next...</span>
+                    <span className="text-xs bg-gray-100 px-2 py-0.5 rounded dark:bg-white/10">PENDING</span>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
 
-                <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10">
-                  <p>
-                    <span className="font-semibold">Status:</span>{' '}
-                    <span className={`font-bold ${statusTone.replace('bg-', 'text-').split(' ')[0]}`}>
-                      {(runState?.status ?? (isRunning ? 'running' : 'idle')).toUpperCase()}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="font-semibold">Message:</span> {statusMessage || runState?.report?.message || 'Waiting for run...'}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Steps:</span> {states.length > 0 ? states.length : (runState?.report?.steps.length ?? 0)}
-                  </p>
+          <div className={`panel p-5 bg-white shadow-panel dark:bg-white/5 dark:shadow-panel-dark${batchResults.length === 0 ? ' lg:col-span-2' : ''}`}>
+            <h2 className="mb-3 text-lg font-semibold dark:text-white">Run Report</h2>
+            <div className="space-y-2 text-sm dark:text-white/80">
+              <p>
+                <span className="font-semibold">Run ID:</span>{' '}
+                <span className="mono text-xs">{runId || '—'}</span>
+              </p>
+              {/* Run Configuration Display */}
+              {isRunning && (
+                <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10 text-xs text-black/60 dark:text-white/60">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="font-semibold block">Strategy:</span>
+                      <span className="capitalize">{strategy}</span>
+                    </div>
+
+                    <div className="col-span-2">
+                      <span className="font-semibold block">Instructions:</span>
+                      <span className="italic block truncate" title={instructions}>{instructions}</span>
+                    </div>
+                    {isBatchMode && (
+                      <div className="col-span-2 mt-1">
+                        <span className="font-semibold">Batch:</span>{' '}
+                        {batchResults.length + 1} of {batchResults.length + batchQueue.length + (processingRunId ? 1 : 0)}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10">
+                <p>
+                  <span className="font-semibold">Status:</span>{' '}
+                  <span className={`font-bold ${
+                    runState?.status === 'success' ? 'text-gs-teal' :
+                    runState?.status === 'error' ? 'text-ember' :
+                    runState?.status === 'blocked' ? 'text-amber-500' :
+                    isRunning ? 'text-gs-blue' :
+                    'text-black/60 dark:text-white/60'
+                  }`}>
+                    {(runState?.status ?? (isRunning ? 'running' : 'idle')).toUpperCase()}
+                  </span>
+                </p>
+                <p>
+                  <span className="font-semibold">Message:</span> {statusMessage || runState?.report?.message || 'Waiting for run...'}
+                </p>
+                <p>
+                  <span className="font-semibold">Steps:</span> {states.length > 0 ? states.length : (runState?.report?.steps.length ?? 0)}
+                </p>
               </div>
             </div>
-
-
-            <div className="panel p-5 bg-white shadow-panel dark:bg-white/5 dark:shadow-panel-dark">
-              <h2 className="mb-3 text-lg font-semibold dark:text-white">Decisions</h2>
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                {decisions.map((entry, index) => (
-                  <pre key={`${entry.step}-${index}`} className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-black/5 p-2 text-xs dark:bg-black/40 dark:text-white/90">
-                    Step {entry.step}{'\n'}{JSON.stringify(entry.payload, null, 2)}
-                  </pre>
-                ))}
-                {decisions.length === 0 && <p className="text-sm text-black/50 dark:text-white/40">No decisions yet.</p>}
-              </div>
-            </div>
-          </section>
+          </div>
         </div>
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-2">
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <section className="panel flex flex-col p-5 bg-white shadow-panel h-[32rem] overflow-hidden dark:bg-white/5 dark:shadow-panel-dark">
             <div className="mb-3 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-semibold dark:text-white">Live Logs</h2>
@@ -728,7 +731,7 @@ function App() {
                       onChange={(event) => {
                         const nextProvider = event.target.value as Provider;
                         setProvider(nextProvider);
-                        setModel(PROVIDER_MODELS[nextProvider][0]);
+                        setModel(PROVIDER_MODELS[nextProvider][0] ?? '');
                       }}
                     >
                       <option value="openai">OpenAI</option>
