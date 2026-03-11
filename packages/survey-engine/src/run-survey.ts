@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { requestLlmDecision, type Decision } from '@verdant/llm';
 import { chromium } from 'playwright';
-import { extractQuestionState, isValidSurveySurface, stateFingerprint } from './extractor/question-state.js';
+import { extractQuestionState, isValidSurveySurface, stateFingerprint, type ContextRef } from './extractor/question-state.js';
 import { executeDecision } from './executor/actions.js';
 import { SYSTEM_PROMPT, buildStepPrompt } from './prompts.js';
 import { chooseTextByRuleset, deterministicSelection } from './strategy.js';
@@ -48,6 +48,7 @@ const fallbackDecision = (input: {
       action: 'type_text',
       selections: [],
       text: chooseTextByRuleset(state, input.ruleset),
+      matrixSelections: [],
       confidence: 0.35,
       reason: 'Fallback strategy: typing deterministic text.',
       needs_screenshot: false,
@@ -56,20 +57,27 @@ const fallbackDecision = (input: {
   }
 
   if (state.inputType === 'single_select' || state.inputType === 'yes_no') {
-    const selections = deterministicSelection(state, input.strategy, input.ruleset, input.runId)
-      .slice(0, 1)
-      .map((label) => ({ label }));
+    // If an option is already selected, skip re-selection and prefer navigation
+    // (handles final questions that need explicit Submit after auto-advance never fires)
+    const alreadySelected = state.options.some((o) => o.selected);
 
-    if (selections.length > 0) {
-      return {
-        action: 'select_single',
-        selections,
-        text: '',
-        confidence: 0.35,
-        reason: 'Fallback strategy: choosing deterministic single option.',
-        needs_screenshot: false,
-        assertions: []
-      };
+    if (!alreadySelected) {
+      const selections = deterministicSelection(state, input.strategy, input.ruleset, input.runId)
+        .slice(0, 1)
+        .map((label) => ({ label }));
+
+      if (selections.length > 0) {
+        return {
+          action: 'select_single',
+          selections,
+          text: '',
+          matrixSelections: [],
+          confidence: 0.35,
+          reason: 'Fallback strategy: choosing deterministic single option.',
+          needs_screenshot: false,
+          assertions: []
+        };
+      }
     }
   }
 
@@ -81,11 +89,89 @@ const fallbackDecision = (input: {
         action: 'select_multi',
         selections,
         text: '',
+        matrixSelections: [],
         confidence: 0.35,
         reason: 'Fallback strategy: choosing deterministic multi options.',
         needs_screenshot: false,
         assertions: []
       };
+    }
+  }
+
+  if (state.inputType === 'slider') {
+    const min = state.sliderMin ?? 0;
+    const max = state.sliderMax ?? 100;
+    const midpoint = Math.round((min + max) / 2);
+    return {
+      action: 'set_slider',
+      selections: [],
+      text: String(midpoint),
+      matrixSelections: [],
+      confidence: 0.4,
+      reason: 'Fallback: setting slider to midpoint of range.',
+      needs_screenshot: false,
+      assertions: []
+    };
+  }
+
+  if (state.inputType === 'date_picker') {
+    const today = new Date().toISOString().split('T')[0] ?? '';
+    return {
+      action: 'set_date',
+      selections: [],
+      text: today,
+      matrixSelections: [],
+      confidence: 0.4,
+      reason: "Fallback: filling date picker with today's date.",
+      needs_screenshot: false,
+      assertions: []
+    };
+  }
+
+  if (state.inputType === 'matrix') {
+    const matrixSelections = (state.matrixRows ?? [])
+      .map((row) => ({
+        rowLabel: row.rowLabel,
+        columnLabel: input.strategy === 'last'
+          ? (row.options.at(-1)?.label ?? '')
+          : (row.options[0]?.label ?? '')
+      }))
+      .filter((s) => s.columnLabel);
+    if (matrixSelections.length > 0) {
+      return {
+        action: 'select_matrix',
+        matrixSelections,
+        selections: [],
+        text: '',
+        confidence: 0.35,
+        reason: 'Fallback: selecting first/last column for each matrix row.',
+        needs_screenshot: false,
+        assertions: []
+      };
+    }
+  }
+
+  // Unknown inputType with visible button options — treat as single_select
+  // Handles platforms that render choices as plain buttons (NPS, picture-choice, custom scales)
+  // that aren't labelled with radio/checkbox roles.
+  if (state.inputType === 'unknown' && state.options.length >= 2) {
+    const alreadySelected = state.options.some((o) => o.selected);
+    if (!alreadySelected) {
+      const target = input.strategy === 'last'
+        ? state.options.at(-1)?.label
+        : state.options[0]?.label;
+      if (target) {
+        return {
+          action: 'select_single',
+          selections: [{ label: target }],
+          text: '',
+          matrixSelections: [],
+          confidence: 0.3,
+          reason: 'Fallback strategy: button-only options treated as single_select.',
+          needs_screenshot: false,
+          assertions: []
+        };
+      }
     }
   }
 
@@ -95,6 +181,7 @@ const fallbackDecision = (input: {
       action: hasSubmit ? 'click_submit' : 'click_next',
       selections: [],
       text: '',
+      matrixSelections: [],
       confidence: 0.3,
       reason: 'Fallback strategy: continue navigation.',
       needs_screenshot: false,
@@ -106,6 +193,7 @@ const fallbackDecision = (input: {
     action: 'cannot_proceed',
     selections: [],
     text: '',
+    matrixSelections: [],
     confidence: 0.2,
     reason: 'Fallback strategy: no actionable UI.',
     needs_screenshot: true,
@@ -185,7 +273,7 @@ const finalReport = async (input: {
 
 export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
   const startedAt = new Date();
-  const maxSteps = run.maxSteps ?? 40;
+  const maxSteps = run.maxSteps ?? 50;
   const steps: StepResult[] = [];
   let status: RunStatus = 'success';
   let message = 'Survey run completed.';
@@ -201,8 +289,17 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
       : {}
   );
   const page = await context.newPage();
+  // Tracks which frame hosts the survey — avoids re-discovering it on every step
+  const frameRef: ContextRef = { value: page };
 
   try {
+    // Animation speed optimisation: CDP speeds up CSS animations and WAAPI (element.animate)
+    // on the main-page target without touching React's rendering scheduler or component mounting.
+    const cdpSession = await context.newCDPSession(page);
+    await cdpSession.send('Animation.enable');
+    await cdpSession.send('Animation.setPlaybackRate', { playbackRate: 10 });
+
+    emit(run, { type: 'log', level: 'debug', message: 'Animation optimisation active (CDP 10x playback rate).' });
     emit(run, { type: 'log', level: 'info', message: `Opening survey: ${run.surveyUrl}` });
     emit(run, { type: 'status', status: 'running', message: 'Opening survey page...' });
     await page.goto(run.surveyUrl, {
@@ -211,7 +308,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
     });
 
     // Retry extraction for up to 10 seconds to allow iframes/dynamic content to load
-    let initialState = await extractQuestionState(page);
+    let initialState = await extractQuestionState(page, frameRef);
     let retries = 0;
     const maxRetries = 10;
     emit(run, { type: 'status', status: 'running', message: 'Analyzing page structure...' });
@@ -219,7 +316,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
     while (!isValidSurveySurface(initialState) && retries < maxRetries) {
       emit(run, { type: 'log', level: 'debug', message: `State extraction check ${retries + 1}/${maxRetries}: No valid surface found. Retrying in 1s...` });
       await new Promise(resolve => setTimeout(resolve, 1000));
-      initialState = await extractQuestionState(page);
+      initialState = await extractQuestionState(page, frameRef);
       retries++;
     }
 
@@ -242,7 +339,9 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
       let stagnantSteps = 0;
 
       for (let step = 1; step <= maxSteps; step += 1) {
-        const state = await extractQuestionState(page);
+        const t0 = Date.now();
+        const state = await extractQuestionState(page, frameRef);
+        const tExtract = Date.now() - t0;
         emit(run, { type: 'state', step, state });
         emit(run, {
           type: 'log',
@@ -316,6 +415,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
           message: `LLM Prompt:\n${stepPrompt}`
         });
 
+        const tLlmStart = Date.now();
         let decision: Decision;
         try {
           decision = await requestLlmDecision({
@@ -341,6 +441,8 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
           });
         }
 
+        const tLlm = Date.now() - tLlmStart;
+        const tExecStart = Date.now();
         emit(run, { type: 'decision', step, decision });
         emit(run, {
           type: 'log',
@@ -366,7 +468,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
           status = 'blocked';
           message = `LLM reported cannot_proceed at step ${step}.`;
 
-          if (!run.captureScreenshots) {
+          if (run.captureScreenshots) {
             const artifact = await captureScreenshot(page, run.artifactsDir, 'cannot-proceed', step);
             artifacts.push(artifact);
             emit(run, { type: 'artifact', step, artifact });
@@ -386,13 +488,18 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
         }
 
 
+        const tBeforeExec = Date.now();
         const beforeFingerprint = stateFingerprint(state);
         const execution = await executeDecision({
           page,
           beforeState: state,
           decision,
-          speedMode: run.speedMode
+          speedMode: run.speedMode,
+          contextRef: frameRef
         });
+
+        const tExec = Date.now() - tBeforeExec;
+        console.log(`[PERF] step=${step} extract=${tExtract}ms llm=${tLlm}ms exec=${tExec}ms total=${tExtract+tLlm+tExec}ms`);
 
         // Emit status for action execution
         emit(run, {
@@ -467,7 +574,7 @@ export const runSurvey = async (run: RunSurveyInput): Promise<RunReport> => {
         if (stagnantSteps >= 2) {
           status = 'blocked';
           message = 'Runner cannot progress after repeated attempts.';
-          if (!run.captureScreenshots) {
+          if (run.captureScreenshots) {
             const artifact = await captureScreenshot(page, run.artifactsDir, 'stagnant', step);
             stepResult.artifacts.push(artifact);
             emit(run, { type: 'artifact', step, artifact });

@@ -1,4 +1,4 @@
-export type Provider = 'openai' | 'anthropic' | 'google' | 'deepseek';
+export type Provider = 'openai' | 'anthropic' | 'google' | 'deepseek' | 'groq' | 'openrouter' | 'xai';
 
 export type RunPayload = {
   surveyUrl: string;
